@@ -60,6 +60,10 @@
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
 
+#include "PointCloudExporter.hpp"
+
+PointCloudExporter exporter;
+
 #define INIT_TIME           (0.1)
 #define LASER_POINT_COV     (0.001)
 #define MAXN                (720000)
@@ -495,6 +499,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
         laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
         laserCloudmsg.header.frame_id = "camera_init";
         pubLaserCloudFull.publish(laserCloudmsg);
+        exporter.addPoints(laserCloudWorld);
         publish_count -= PUBFRAME_PERIOD;
     }
 
@@ -1017,6 +1022,8 @@ int main(int argc, char** argv)
         status = ros::ok();
         rate.sleep();
     }
+
+    exporter.saveToBinaryFile("/workspace/export_cloud.bin",4);
 
     /**************** save map ****************/
     /* 1. make sure you have enough memories
