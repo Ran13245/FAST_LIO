@@ -103,6 +103,35 @@ struct BasePoint
     }
 };
 
+// #include <algorithm>
+// #include <cstdint>
+// #include <tuple>
+
+// inline uint32_t intensityToHeatmapRGBA(const float& _intensity) {
+//     // 将 intensity 限定到 [0, 255]
+//     float intensity = std::max(0.0f, std::min(255.0f, _intensity));
+
+//     int r, g, b;
+//     if (intensity < 128.0f) {
+//         r = 0;
+//         g = static_cast<int>(255.0f * intensity / 128.0f);
+//         b = 255;
+//     } else {
+//         float scaled = (intensity - 128.0f) / 127.0f;
+//         r = static_cast<int>(255.0f * scaled);
+//         g = 255;
+//         b = static_cast<int>(255.0f - 255.0f * scaled);
+//     }
+
+//     const uint8_t alpha = 255;  // 不透明
+//     // 按 0xRRGGBBAA 打包（大端意义上的 RGBA）
+//     return
+//         (static_cast<uint32_t>(r) << 24) |
+//         (static_cast<uint32_t>(g) << 16) |
+//         (static_cast<uint32_t>(b) <<  8) |
+//          static_cast<uint32_t>(alpha);
+// }
+
 struct CompressedPoint
 {
     using Scalar = uint64_t;
@@ -112,11 +141,13 @@ struct CompressedPoint
 
     CompressedPoint(uint64_t morton_code = 0, uint32_t color = 0, uint32_t normal = 0) : normal(normal), color(color), morton_code(morton_code) {}
 
-    CompressedPoint(const Eigen::Vector4f &pt)
+    CompressedPoint(const Eigen::Vector4f &pt, uint32_t rgba32=0, uint32_t normal24 = 0): 
+        normal{normal24},
+        color{rgba32}
     {
         this->morton_code = CompressedPoint::encode_morton(pt);
-        this->color = 0;
-        this->normal = 0;
+        // this->color = 0;
+        // this->normal = 0;
     }
 
     constexpr static uint32_t color_bit_mask = 0x00FFFFFF;

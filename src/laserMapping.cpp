@@ -62,6 +62,8 @@
 
 #include "PointCloudExporter.hpp"
 
+using WHU_robot::PointCloudExporter;
+
 PointCloudExporter exporter;
 
 #define INIT_TIME           (0.1)

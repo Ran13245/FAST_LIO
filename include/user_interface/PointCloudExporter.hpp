@@ -9,8 +9,14 @@
 #include <iostream>
 #include <tuple>
 #include <algorithm>
-// 引入 base_type.hpp 中的定义
+
 #include "base_type.hpp"
+
+
+#include <Eigen/Dense>
+#include <pcl/io/pcd_io.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/keypoints/uniform_sampling.h>
 
 // 辅助把宏值转成字符串
 #define STR_HELPER(x) #x
@@ -51,16 +57,18 @@
   #error "std::bit_cast not available: ensure you're using a C++20 standard library implementation."
 #endif
 
-// using PointCloudXYZI = pcl::PointCloud<pcl::PointXYZI>;
-// using PointCloudXYZRGB = pcl::PointCloud<pcl::PointXYZRGB>;
+
+namespace WHU_robot{
+
+  static constexpr size_t PACKET_MTU = 1400; // 可调整
+      // 使用 base_type 定义的类型
+  using PointCloudXYZI = pcl::PointCloud<pcl::PointXYZINormal>;
+  using PointType = CompressedPoint;
+  using PacketType = PointPacket<PointType, PACKET_MTU>;
+  using PointPollType = PointPoll<PointType>;
 
 class PointCloudExporter {
 public:
-    // 使用 base_type 定义的类型
-    using PointType = BasePointf;
-    static constexpr size_t PACKET_MTU = 1400; // 可调整
-    using PacketType = PointPacket<PointType, PACKET_MTU>;
-    using PointPollType = PointPoll<PointType>;
 
     /**
      * @brief 构造函数
@@ -76,20 +84,6 @@ public:
 
   bool saveToBinaryFile(const std::string &filename, size_t num_threads);
 
-    /**
-     * @brief 导出点云为 PCD 文件
-     * @param file_path 输出文件路径
-     */
-    // void saveToPCDFile(const std::string& file_path) const;
-
-    /**
-     * @brief 获取内部点池引用（可用于调试或其他处理）
-     * @return const reference to PointPoll<BasePointf>
-     */
-    // const PointPollType& getPointPool() const;
-
-  
-
 private:
     /**
      * @brief 将点云序列化为多个二进制数据包（适合网络传输）
@@ -98,97 +92,60 @@ private:
      */
     // std::shared_ptr<std::vector<std::span<std::byte>>> serializeToPackets(size_t num_threads = 1);
 
-        /**
-     * @brief 获取当前缓存的所有点（BasePointf 格式）
-     * @return vector of BasePointf
-     */
-    // std::vector<PointType> getRawPoints() const;
+    /*-----------------------------consts-----------------------------------------*/
+    static constexpr float filter_resolution = 0.05f; 
+    static constexpr uint8_t filter_type = 2;//type 0 none; type 1 VoxelGrid; type 2 UniformSampling
 
-    std::tuple<int, int, int> intensityToHeatmap(float intensity);
+    /*-----------------------------functions-----------------------------------------*/
+   uint32_t intensityToHeatmapRGBA(const float& _intensity);
+    PointCloudXYZI::ConstPtr cloudFilter(const PointCloudXYZI::ConstPtr& cloud, float resolution = filter_resolution);
+
+    /*-----------------------------objs-----------------------------------------*/
     PointPollType point_poll_;
 };
 
-// Inline 实现放在 hpp 中以支持模板
-#include <Eigen/Dense>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
 
 inline PointCloudExporter::PointCloudExporter(size_t initial_pool_size): point_poll_{initial_pool_size}
 {
     
 }
 
-inline void PointCloudExporter::addPoints(const PointCloudXYZI::ConstPtr& cloud)
+inline void PointCloudExporter::addPoints(const PointCloudXYZI::ConstPtr& _cloud)
 {
-    for (const auto& pt : cloud->points) {
-        PointType base_pt;
-        base_pt.xyz() << pt.x, pt.y, pt.z;
-        float intensity = pt.intensity / 255.0f;
-        auto [r, g, b] = intensityToHeatmap(intensity);
-        base_pt.rgb() << r, g, b;
-        base_pt.normal() << 0.0f, 0.0f, 0.0f;
 
+    PointCloudXYZI::ConstPtr cloud = cloudFilter(_cloud);
+    for (const auto& pt : cloud->points) {
+        PointType base_pt{Eigen::Vector4f{ pt.x, pt.y, pt.z, pt.intensity }, intensityToHeatmapRGBA( pt.intensity)};
         point_poll_.AddPoint(base_pt);
+
     }
+
 }
 
-// inline std::vector<PointCloudExporter::PointType> PointCloudExporter::getRawPoints() const
-// {
-//     return point_poll_._points;
-// }
+inline uint32_t PointCloudExporter::intensityToHeatmapRGBA(const float& _intensity) {
+    // 将 intensity 限定到 [0, 255]
+    float intensity = std::max(0.0f, std::min(255.0f, _intensity));
 
-// inline std::shared_ptr<std::vector<std::span<std::byte>>> PointCloudExporter::serializeToPackets(size_t num_threads)
-// {
-//     // return point_poll_.EncodePackets<PacketType>(0, point_poll_.size(), num_threads);
-
-// }
-
-// inline void PointCloudExporter::saveToPCDFile(const std::string& file_path) const
-// {
-//     pcl::PointCloud<pcl::PointXYZRGB> cloud;
-//     cloud.reserve(point_poll_.size());
-
-//     for (const auto& pt : point_poll_._points) {
-//         pcl::PointXYZRGB pcl_pt;
-//         pcl_pt.x = pt._pos[0];
-//         pcl_pt.y = pt._pos[1];
-//         pcl_pt.z = pt._pos[2];
-//         pcl_pt.r = static_cast<uint8_t>(pt._color[0] * 255);
-//         pcl_pt.g = static_cast<uint8_t>(pt._color[1] * 255);
-//         pcl_pt.b = static_cast<uint8_t>(pt._color[2] * 255);
-//         cloud.push_back(pcl_pt);
-//     }
-
-//     if (pcl::io::savePCDFile(file_path, cloud) == 0) {
-//         std::cout << "Saved PCD file: " << file_path << std::endl;
-//     } else {
-//         std::cerr << "Failed to save PCD file: " << file_path << std::endl;
-//     }
-// }
-
-// inline const PointCloudExporter::PointPollType& PointCloudExporter::getPointPool() const
-// {
-//     return point_poll_;
-// }
-
-inline std::tuple<int, int, int> PointCloudExporter::intensityToHeatmap(float intensity) {
-        intensity = std::max(0.0f, std::min(255.0f, intensity));
-
-        int r, g, b;
-
-        if (intensity < 128.0f) {
-            r = 0;
-            g = static_cast<int>(255.0f * intensity / 128.0f);
-            b = 255;
-        } else {
-            float scaled = (intensity - 128.0f) / 127.0f;
-            r = static_cast<int>(255.0f * scaled);
-            g = 255;
-            b = static_cast<int>(255.0f - 255.0f * scaled);
-        }
-
-        return std::make_tuple(r, g, b);
+    int r, g, b;
+    if (intensity < 128.0f) {
+        r = 0;
+        g = static_cast<int>(255.0f * intensity / 128.0f);
+        b = 255;
+    } else {
+        float scaled = (intensity - 128.0f) / 127.0f;
+        r = static_cast<int>(255.0f * scaled);
+        g = 255;
+        b = static_cast<int>(255.0f - 255.0f * scaled);
     }
+
+    const uint8_t alpha = 255;  // 不透明
+    // 按 0xRRGGBBAA 打包（大端意义上的 RGBA）
+    return
+        (static_cast<uint32_t>(r) << 24) |
+        (static_cast<uint32_t>(g) << 16) |
+        (static_cast<uint32_t>(b) <<  8) |
+         static_cast<uint32_t>(alpha);
+}
 
 inline bool PointCloudExporter::saveToBinaryFile(const std::string &filename, size_t num_threads)
 {
@@ -233,3 +190,36 @@ inline bool PointCloudExporter::saveToBinaryFile(const std::string &filename, si
     file.close();
     return true;
 }
+
+
+inline PointCloudXYZI::ConstPtr
+PointCloudExporter::cloudFilter(const PointCloudXYZI::ConstPtr& cloud,
+                                float resolution)
+{
+
+  if constexpr(filter_type == 0){//none
+            return cloud;
+  } else if constexpr(filter_type == 1){//VoxelGrid
+            pcl::VoxelGrid<PointCloudXYZI::PointType> voxel_grid;
+            voxel_grid.setInputCloud(cloud);
+            voxel_grid.setLeafSize(resolution, resolution, resolution);
+
+            PointCloudXYZI::Ptr filtered_cloud(new PointCloudXYZI);
+            voxel_grid.filter(*filtered_cloud);
+            return filtered_cloud;
+  } else if constexpr(filter_type == 2){//UniformSampling
+              pcl::UniformSampling<PointCloudXYZI::PointType> uniform_sampling;
+            uniform_sampling.setInputCloud(cloud);
+            uniform_sampling.setRadiusSearch(resolution);
+
+            PointCloudXYZI::Ptr filtered_cloud(new PointCloudXYZI);
+            uniform_sampling.filter(*filtered_cloud);
+            return filtered_cloud;
+  } else {
+            std::cerr << "Invalid filter type. Using VoxelGrid by default." << std::endl;
+            return cloud;
+  }
+}
+
+
+}//namespace WHU_robot
