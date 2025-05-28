@@ -60,11 +60,6 @@
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
 
-#include "PointCloudExporter.hpp"
-
-using WHU_robot::PointCloudExporter;
-
-PointCloudExporter exporter;
 
 #define INIT_TIME           (0.1)
 #define LASER_POINT_COV     (0.001)
@@ -501,7 +496,6 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
         laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
         laserCloudmsg.header.frame_id = "camera_init";
         pubLaserCloudFull.publish(laserCloudmsg);
-        exporter.addPoints(laserCloudWorld);
         publish_count -= PUBFRAME_PERIOD;
     }
 
@@ -1025,8 +1019,7 @@ int main(int argc, char** argv)
         rate.sleep();
     }
 
-    exporter.saveToBinaryFile("/workspace/export_cloud.bin",4);
-
+  
     /**************** save map ****************/
     /* 1. make sure you have enough memories
     /* 2. pcd save will largely influence the real-time performences **/

@@ -67,7 +67,7 @@ include_directories(
   ${PCL_INCLUDE_DIRS}
   ${PYTHON_INCLUDE_DIRS}
   include
-  include/user_interface
+  # include/user_interface
 )
 
 add_message_files(
